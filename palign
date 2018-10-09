@@ -1,0 +1,138 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+use IO::File;
+use Data::Dumper;
+use Time::HiRes qw(gettimeofday tv_interval);
+use Getopt::Long;
+
+my $opts = {};
+my $k = 16;
+GetOptions($opts, qw(k=s));
+if($opts->{k}) {
+    $k=$opts->{k};
+}
+
+my $t0        = [gettimeofday];
+my $bytes     = 0;
+my $hashtable = {}; # kmer-based hash lookup table
+my $sequences = {}; # convenience for printing & substr
+my @queries   = @ARGV;
+my @refs      = shift @queries;
+
+print "refs=@refs queries=@queries k=$k\n";
+readfa(\&hash, @refs);
+print "Built hashtable in @{[tv_interval $t0]} secs\n";
+
+readfa(\&align, @queries);
+print "Aligned in @{[tv_interval $t0]} secs\n";
+
+sub readfa {
+    my ($cb, @files) = @_;
+
+    for my $fn (@files) {
+	my $io = IO::File->new($fn);
+	my ($id, $seq);
+
+	while(my $line = <$io>) {
+	    $bytes += length $line;
+	    chomp $line;
+	    if($line =~ m{^>}smix) {
+		#########
+		# extend hashtable with the last-read sequence
+		#
+		if($id) { 
+		    $sequences->{$id} = $seq; # note conflict across files/sequences
+		    $cb->($id, $seq);
+		}
+
+		($id) = $line =~ m{^>\s*(\S+)}smix;
+		$seq = "";
+		next;
+	    }
+	    $seq .= $line;
+	}
+
+	#########
+	# extend hashtable with the final sequence
+	#
+	$sequences->{$id} = $seq; # note conflict across files/sequences
+	$cb->($id, $seq);
+	$io->close;
+    }
+}
+
+sub hash {
+    my ($id, $seq) = @_;
+
+    for my $start (0..(length $seq)-$k) {
+	my $subseq = substr $seq, $start, $k;
+	if(!exists $hashtable->{$subseq}) {
+	    $hashtable->{$subseq} = [];
+	}
+	push @{$hashtable->{$subseq}}, { id => $id, start => $start };
+    }
+}
+
+sub align {
+    my ($id, $seq) = @_;
+
+    my $hits = {};
+
+    for my $start (0..(length $seq)-$k) {
+	my $subseq = substr $seq, $start, $k;
+
+	for my $hit (@{$hashtable->{$subseq}||[]}) {
+	    my $hit_id    = $hit->{id};
+	    my $hit_start = $hit->{start};
+	    my $last_hit  = scalar @{$hits->{$hit_id}||[]} ? $hits->{$hit_id}->[-1] : undef;
+	    my $new       = 0;
+
+	    if(!$last_hit) {
+		#########
+		# first hit for query
+		#
+		$new = 1;
+
+	    } else {
+		if($start-1 == $last_hit->{query_end}-$k+1) {
+		    #########
+		    # extend hit for query
+		    #
+		    $last_hit->{query_end} ++;
+
+		} else {
+		    #########
+		    # next hit for query
+		    #
+		    $new = 1;
+		}
+	    }
+
+	    if($new) {
+		push @{$hits->{$hit_id}}, {
+			query_start => $start,
+			query_end   => $start+$k-1,
+			hit_start   => $hit_start,
+		};
+
+		next;
+	    }
+	}
+    }
+
+    for my $hit_id (keys %{$hits}) {
+	printf ">%-16s                %s\n", $hit_id, $sequences->{$hit_id};
+	for my $hit (@{$hits->{$hit_id}}) {
+	    my $query_start = $hit->{query_start};
+	    my $query_end   = $hit->{query_end};
+	    my $hit_start   = $hit->{hit_start};
+	    printf "+%-16s [%5d..%-5d] %s%s\n",
+		$id,
+		$query_start, $query_end,
+		" "x$hit_start,
+		substr $sequences->{$id}, $query_start, $query_end-$query_start+1;
+	}
+    }
+    print "\n";
+}
