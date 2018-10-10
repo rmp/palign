@@ -21,7 +21,13 @@ my $hashtable = {_sequences => {}}; # kmer-based hash lookup table
 my $sequences = $hashtable->{_sequences};
 
 if($opts->{query} && $opts->{index} && scalar @{$opts->{index}} > 1) {
-    croak q[can only use one index with --query];
+    print qq[Can only use one --index with --query\n];
+    exit 1;
+}
+
+if($opts->{query} && !$opts->{index}) {
+    print qq[Must use one --index with --query\n];
+    exit 1;
 }
 
 if($opts->{query}) {
@@ -123,6 +129,7 @@ sub align {
 	    my $query_start = $hit->{query_start};
 	    my $query_end   = $hit->{query_end};
 	    my $hit_start   = $hit->{hit_start};
+
 	    printf "+%-16s [%5d..%-5d] %s%s\n",
 		$id,
 		$query_start, $query_end,
