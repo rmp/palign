@@ -6,40 +6,39 @@ use Data::Dumper;
 use Time::HiRes qw(gettimeofday tv_interval);
 use Getopt::Long;
 use Carp;
-use Storable;
 use lib qw(lib);
-use palign qw(readfa hash align);
+use palign qw(readfa hash align attach detach report);
 
 my $opts = {};
-GetOptions($opts, qw(k=s index=s@ query=s@));
+GetOptions($opts, qw(k=s index=s query report));
 if($opts->{k}) {
     $palign::k = $opts->{k};
 }
 
-my $t0 = [gettimeofday];
-
-if($opts->{query} && $opts->{index} && scalar @{$opts->{index}} > 1) {
-    print qq[Can only use one --index with --query\n];
-    exit 1;
+if(!$opts->{index}) {
+  $opts->{index} = 'index.stbl';
 }
 
-if($opts->{query} && !$opts->{index}) {
-    print qq[Must use one --index with --query\n];
-    exit 1;
+my $t0 = [gettimeofday];
+my @inputs = @ARGV;
+
+attach($opts->{index} || 'index.stbl');
+
+if($opts->{report}) {
+  report();
+  exit 0;
 }
 
 if($opts->{query}) {
-    # load index from disk
-    $palign::hashtable = retrieve $opts->{index}->[0];
-
-    readfa(\&align, @{$opts->{query}});
+    readfa(\&align, @inputs);
     print "Aligned in @{[tv_interval $t0]} secs\n";
+    detach();
     exit 0;
 }
 
 if($opts->{index}) {
-    readfa(\&hash, @{$opts->{index}});
-    store $palign::hashtable, 'index.stbl';
+    readfa(\&hash, @inputs);
     print "Built hashtable in @{[tv_interval $t0]} secs\n";
+    detach();
     exit 0;
 }
