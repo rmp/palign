@@ -17,8 +17,13 @@ my $dbh;
 $|++;
 
 sub attach {
-    my ($fn) = @_;
-    $dbh = DBI->connect("dbi:SQLite:dbname=$fn","","", { AutoCommit => 0, RaiseError => 1});
+    my ($fn, $mode) = @_;
+    $dbh = DBI->connect("dbi:SQLite:dbname=$fn","","",
+			{
+			    AutoCommit => 0,
+			    RaiseError => 1,
+			    ($mode && $mode eq 'ro') ? (sqlite_open_flags => DBD::SQLite::OPEN_READONLY) : (),
+			});
 
 #    $dbh->do(qq[CREATE TABLE IF NOT EXISTS info (k integer unsigned not null)]);
     $dbh->do(qq[CREATE TABLE IF NOT EXISTS hash (rowid integer primary key, subseq char(@{[$k]}) not null unique)]);

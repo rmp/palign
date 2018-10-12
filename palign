@@ -22,14 +22,15 @@ if(!$opts->{index}) {
 my $t0 = [gettimeofday];
 my @inputs = @ARGV;
 
-attach($opts->{index} || 'index.stbl');
 
 if($opts->{report}) {
-  report();
-  exit 0;
+    attach($opts->{index} || 'index.stbl', 'ro');
+    report();
+    exit 0;
 }
 
 if($opts->{query}) {
+    attach($opts->{index} || 'index.stbl', 'ro');
     readfa(\&align, @inputs);
     print "Aligned in @{[tv_interval $t0]} secs\n";
     detach();
@@ -37,6 +38,7 @@ if($opts->{query}) {
 }
 
 if($opts->{index}) {
+    attach($opts->{index} || 'index.stbl', 'rw');
     readfa(\&hash, @inputs);
     print "Built hashtable in @{[tv_interval $t0]} secs\n";
     detach();
