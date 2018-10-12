@@ -8,7 +8,7 @@ use DBI;
 use DBD::SQLite;
 use Carp;
 
-our @EXPORT_OK = qw(readfa hash align attach detach report);
+our @EXPORT_OK = qw(readfa hash align attach detach report refs);
 our $k         = 16;
 
 my $ref_cache  = {};
@@ -240,4 +240,25 @@ sub recall {
     substr $seq, $start, $k, $subseq; # splice in the remaining piece
     return $seq;
 }
+
+sub refs {
+    my ($full, @inputs) = @_;
+
+    my $q_str  = q[];
+    my $q_vals = [];
+
+    if(scalar @inputs) {
+	$q_str = join q[ ], q[WHERE], join q[ OR ], map { sprintf q[seq_id LIKE ?] } @inputs;
+	push @{$q_vals}, map { "%$_%" } @inputs;
+    }
+
+    my $ref = $dbh->selectall_arrayref(qq[SELECT seq_id FROM reference $q_str], {}, @{$q_vals});
+    for my $row (@{$ref}) {
+	printf ">%s\n", $row->[0];
+	if($full) {
+	    print recall($row->[0]), "\n";
+	}
+    }
+}
+
 1;

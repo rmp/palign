@@ -7,10 +7,10 @@ use Time::HiRes qw(gettimeofday tv_interval);
 use Getopt::Long;
 use Carp;
 use lib qw(lib);
-use palign qw(readfa hash align attach detach report);
+use palign qw(readfa hash align attach detach report refs);
 
 my $opts = {};
-GetOptions($opts, qw(k=s index=s query report));
+GetOptions($opts, qw(k=s index=s query report refs full));
 if($opts->{k}) {
     $palign::k = $opts->{k};
 }
@@ -33,6 +33,13 @@ if($opts->{query}) {
     attach($opts->{index} || 'index.stbl', 'ro');
     readfa(\&align, @inputs);
     print "Aligned in @{[tv_interval $t0]} secs\n";
+    detach();
+    exit 0;
+}
+
+if($opts->{refs}) {
+    attach($opts->{index} || 'index.stbl', 'ro');
+    refs($opts->{full}, @inputs);
     detach();
     exit 0;
 }
