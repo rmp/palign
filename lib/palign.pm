@@ -5,7 +5,7 @@ use IO::File;
 use File::Find;
 use base qw(Exporter);
 use DBI;
-use DBD::SQlite;
+use DBD::SQLite;
 use Carp;
 
 our @EXPORT_OK = qw(readfa hash align attach detach report);
@@ -170,9 +170,17 @@ sub align {
 	}
     }
 
+    my $shorten = sub {
+	my $str = shift;
+	if(length $str > 16) {
+	    $str = join q[..], (substr $str, 0, 6), (substr $str, -8, 8);
+	}
+	return $str;
+    };
+
     for my $hit_id (keys %{$hits}) {
 	my $refseq = recall($hit_id);
-	printf ">%-16s                %s\n", $hit_id, $refseq;
+	printf ">%-16s                %s\n", $shorten->($hit_id), $refseq;
 
 	for my $hit (@{$hits->{$hit_id}}) {
 	    my $query_start = $hit->{query_start};
@@ -180,7 +188,7 @@ sub align {
 	    my $hit_start   = $hit->{hit_start};
 
 	    printf "+%-16s [%5d..%-5d] %s%s\n",
-		$id,
+		$shorten->($id),
 		$query_start, $query_end,
 		" "x$hit_start,
 		substr $query, $query_start, $query_end-$query_start+1;
