@@ -8,7 +8,7 @@ use lib qw(lib);
 use palign qw(readfa hash align attach detach report refs);
 
 my $opts = {};
-GetOptions($opts, qw(k=s index=s query report refs full)) or exit 1;
+GetOptions($opts, qw(k=s index=s query report refs full start=s end=s)) or exit 1;
 if($opts->{k}) {
     $palign::k = $opts->{k};
 }
@@ -31,7 +31,12 @@ attach($opts->{index} || 'index.stbl', {index => 'rw'}->{$action} || 'ro');
 	print "Aligned in @{[tv_interval $t0]} secs\n";
     },
     refs   => sub {
-	refs($opts->{full}, @inputs);
+	refs(
+	    {
+		full  => $opts->{full},
+		start => $opts->{start},
+		end   => $opts->{end},
+	    }, @inputs);
     },
     index  => sub {
 	readfa(\&hash, @inputs);

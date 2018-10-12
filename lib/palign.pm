@@ -132,7 +132,7 @@ sub hash {
 
     $dbh->commit; # hit disk
     if($count) {
-	print "  $seq_id $count mapped kmers\033[K\r";
+	print "  $seq_id $count mapped ${k}mers\033[K\r";
     }
     return $count;
 }
@@ -207,9 +207,9 @@ sub align {
 }
 
 sub recall {
-    my ($id) = @_;
+    my ($id, $start, $end) = @_;
     my $seq  = q[];
-    my $pos  = 0;
+    my $pos  = $start || 0;
     my $d;
 
     my $id_reference = $dbh->selectall_arrayref(q[SELECT rowid FROM reference WHERE seq_id=?], {}, $id)->[0]->[0];
@@ -222,41 +222,51 @@ sub recall {
 	$sth->execute($id_reference, $pos);
 	my $result = $sth->fetchrow_arrayref;
 	if(!$result) {
+	    #########
+	    # fell off the end
+	    #
+	    my $final = $dbh->selectall_arrayref(q[SELECT hr.start,subseq FROM hash h, hash_ref hr WHERE hr.id_reference=? AND h.rowid=hr.id_hash AND hr.start=(SELECT MAX(start) FROM hash_ref hr2 WHERE id_reference=?);], {}, $id_reference, $id_reference);
+	    my $start  = $final->[0]->[0];
+	    if($start <= length $seq) {
+		my $subseq = $final->[0]->[1];
+		substr $seq, $start, $k, $subseq; # splice in the remaining piece
+	    }
 	    last;
 	}
 
 	$seq .= $result->[0];
 
 	if(!defined $d) {
-	    $d = length $result->[0];
+	    $d = length $result->[0]; # stride by the length of the first match - is this good enough?
 	}
 
 	$pos += $d; # stride by the length of the sequence, not +1
+	if($end && $pos >= $end) {
+	    last;
+	}
     }
 
-    my $final = $dbh->selectall_arrayref(q[SELECT hr.start,subseq FROM hash h, hash_ref hr WHERE hr.id_reference=? AND h.rowid=hr.id_hash AND hr.start=(SELECT MAX(start) FROM hash_ref hr2 WHERE id_reference=?);], {}, $id_reference, $id_reference);
-    my $start = $final->[0]->[0];
-    my $subseq = $final->[0]->[1];
-    substr $seq, $start, $k, $subseq; # splice in the remaining piece
+    if($end) {
+	#########
+	# double-check trimming
+	#
+	my $trim = $end-$start+1;
+	$seq = substr $seq, 0, $trim;
+    }
     return $seq;
 }
 
 sub refs {
-    my ($full, @inputs) = @_;
+    my ($opts, @inputs) = @_;
 
-    my $q_str  = q[];
-    my $q_vals = [];
+    my $q_str  = join q[ ], q[WHERE], join q[ OR ], map { sprintf q[seq_id LIKE ?] } @inputs;
+    my $q_vals = [map { "%$_%" } @inputs];
+    my $ref    = $dbh->selectall_arrayref(qq[SELECT seq_id FROM reference $q_str], {}, @{$q_vals});
 
-    if(scalar @inputs) {
-	$q_str = join q[ ], q[WHERE], join q[ OR ], map { sprintf q[seq_id LIKE ?] } @inputs;
-	push @{$q_vals}, map { "%$_%" } @inputs;
-    }
-
-    my $ref = $dbh->selectall_arrayref(qq[SELECT seq_id FROM reference $q_str], {}, @{$q_vals});
     for my $row (@{$ref}) {
 	printf ">%s\n", $row->[0];
-	if($full) {
-	    print recall($row->[0]), "\n";
+	if(scalar keys %{$opts}) {
+	    print recall($row->[0], $opts->{start}, $opts->{end}), "\n";
 	}
     }
 }
