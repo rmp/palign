@@ -25,10 +25,11 @@ sub attach {
 			    ($mode && $mode eq 'ro') ? (sqlite_open_flags => DBD::SQLite::OPEN_READONLY) : (),
 			});
 
-#    $dbh->do(qq[CREATE TABLE IF NOT EXISTS info (k integer unsigned not null)]);
-    $dbh->do(qq[CREATE TABLE IF NOT EXISTS hash (rowid integer primary key, subseq char(@{[$k]}) not null unique)]);
-    $dbh->do(qq[CREATE TABLE IF NOT EXISTS reference (rowid integer primary key, seq_id char(64) not null unique)]);
-    $dbh->do(qq[CREATE TABLE IF NOT EXISTS hash_ref (rowid integer primary key, id_hash bigint unsigned not null REFERENCES hash(rowid), id_reference bigint unsigned not null REFERENCES reference(rowid), start integer not null, unique(id_hash,id_reference,start))]);
+    if($mode ne 'ro') {
+	$dbh->do(qq[CREATE TABLE IF NOT EXISTS hash (rowid integer primary key, subseq char(@{[$k]}) not null unique)]);
+	$dbh->do(qq[CREATE TABLE IF NOT EXISTS reference (rowid integer primary key, seq_id char(64) not null unique)]);
+	$dbh->do(qq[CREATE TABLE IF NOT EXISTS hash_ref (rowid integer primary key, id_hash bigint unsigned not null REFERENCES hash(rowid), id_reference bigint unsigned not null REFERENCES reference(rowid), start integer not null, unique(id_hash,id_reference,start))]);
+    }
 }
 
 sub detach {
