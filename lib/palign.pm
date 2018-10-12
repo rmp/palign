@@ -147,21 +147,13 @@ sub hash {
 
 sub align {
     my ($id, $query) = @_;
-    my $hits = {};
+    my $hits     = {};
+    my $hits_sth = $dbh->prepare(q[SELECT r.seq_id, hr.start FROM hash_ref hr, reference r, hash h WHERE hr.id_hash=h.rowid AND r.rowid=hr.id_reference AND h.subseq=?]);
 
-    my $hash_sth = $dbh->prepare(q[SELECT rowid FROM hash WHERE subseq=?]);
-    my $hits_sth = $dbh->prepare(q[SELECT r.seq_id, h.start FROM hash_ref h, reference r WHERE h.id_hash=? AND r.rowid=h.id_reference]);
     for my $start (0..(length $query)-$k) {
 	my $subseq = substr $query, $start, $k;
 
-	$hash_sth->execute($subseq);
-	my $result = $hash_sth->fetchrow_arrayref;
-	if(!$result) {
-	    next;
-	}
-	my $id_hash = $result->[0];
-
-	$hits_sth->execute($id_hash);
+	$hits_sth->execute($subseq);
 
 	while (my $hit = $hits_sth->fetchrow_arrayref) {
 	    my $hit_id    = $hit->[0];
@@ -216,42 +208,41 @@ sub align {
 
 sub recall {
     my ($id, $start, $end) = @_;
-    my $seq  = q[];
-    my $pos  = $start || 0;
-    my $d;
+    $start ||= 0;
+    $end   ||= 0;
+    my $seq = q[];
 
     my $id_reference = $dbh->selectall_arrayref(q[SELECT rowid FROM reference WHERE seq_id=?], {}, $id)->[0]->[0];
     if(!$id_reference) {
 	croak qq[could not find sequence $id_reference];
     }
 
-    my $sth = $dbh->prepare(q[SELECT h.subseq FROM hash h, hash_ref hr WHERE hr.id_reference=? AND hr.start=? AND h.rowid=hr.id_hash]);
-    while(1) {
-	$sth->execute($id_reference, $pos);
-	my $result = $sth->fetchrow_arrayref;
-	if(!$result) {
-	    #########
-	    # fell off the end
-	    #
-	    my $final = $dbh->selectall_arrayref(q[SELECT hr.start,subseq FROM hash h, hash_ref hr WHERE hr.id_reference=? AND h.rowid=hr.id_hash AND hr.start=(SELECT MAX(start) FROM hash_ref hr2 WHERE id_reference=?);], {}, $id_reference, $id_reference);
-	    my $start  = $final->[0]->[0];
-	    if($start <= length $seq) {
-		my $subseq = $final->[0]->[1];
-		substr $seq, $start, $k, $subseq; # splice in the remaining piece
-	    }
-	    last;
-	}
+    my $q_str = [];
+    my $q_val = [];
+    if($start) {
+	push @{$q_str}, q[AND hr.start >= ?];
+	push @{$q_val}, $start;
+    }
+    if($end) {
+	push @{$q_str}, q[AND hr.start <= ?];
+	push @{$q_val}, $end;
+    }
 
-	$seq .= $result->[0];
+    my $all = $dbh->selectall_arrayref(<<"EOT", {}, $id, @{$q_val});
+SELECT h.subseq, hr.start
+FROM   hash_ref  hr,
+       reference r,
+       hash      h
+WHERE  hr.id_reference = r.rowid
+AND    hr.id_hash      = h.rowid
+AND    r.seq_id        = ?
+@{[join q[ ], @{$q_str}]} ORDER BY start
+EOT
 
-	if(!defined $d) {
-	    $d = length $result->[0]; # stride by the length of the first match - is this good enough?
-	}
-
-	$pos += $d; # stride by the length of the sequence, not +1
-	if($end && $pos >= $end) {
-	    last;
-	}
+    my $len = $k;
+    for my $row (@{$all}) {
+	substr $seq, $row->[1]-$start, $k, $row->[0];
+	$len ++;
     }
 
     if($end) {
@@ -267,13 +258,13 @@ sub recall {
 sub refs {
     my ($opts, @inputs) = @_;
 
-    my $q_str  = join q[ ], q[WHERE], join q[ OR ], map { sprintf q[seq_id LIKE ?] } @inputs;
+    my $q_str  = scalar @inputs ? (join q[ ], q[WHERE], join q[ OR ], map { sprintf q[seq_id LIKE ?] } @inputs) : "";
     my $q_vals = [map { "%$_%" } @inputs];
     my $ref    = $dbh->selectall_arrayref(qq[SELECT seq_id FROM reference $q_str], {}, @{$q_vals});
 
     for my $row (@{$ref}) {
 	printf ">%s\n", $row->[0];
-	if(scalar keys %{$opts}) {
+	if(scalar grep { $_ } values %{$opts}) {
 	    print recall($row->[0], $opts->{start}, $opts->{end}), "\n";
 	}
     }
