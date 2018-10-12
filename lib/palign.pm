@@ -22,7 +22,7 @@ sub attach {
 			{
 			    AutoCommit => 0,
 			    RaiseError => 1,
-			    ($mode && $mode eq 'ro') ? (sqlite_open_flags => DBD::SQLite::OPEN_READONLY) : (),
+#			    ReadOnly   => ($mode && $mode eq 'ro'),
 			});
 
     if($mode ne 'ro') {
