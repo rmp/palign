@@ -1,8 +1,6 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
-use IO::File;
-use Data::Dumper;
 use Time::HiRes qw(gettimeofday tv_interval);
 use Getopt::Long;
 use Carp;
@@ -10,7 +8,7 @@ use lib qw(lib);
 use palign qw(readfa hash align attach detach report refs);
 
 my $opts = {};
-GetOptions($opts, qw(k=s index=s query report refs full));
+GetOptions($opts, qw(k=s index=s query report refs full)) or exit 1;
 if($opts->{k}) {
     $palign::k = $opts->{k};
 }
@@ -19,35 +17,27 @@ if(!$opts->{index}) {
   $opts->{index} = 'index.stbl';
 }
 
-my $t0 = [gettimeofday];
+my $t0     = [gettimeofday];
 my @inputs = @ARGV;
+my $action = [grep { $opts->{$_} } qw(report query refs index)]->[0]; # order important
 
+# open database
+attach($opts->{index} || 'index.stbl', {index => 'rw'}->{$action} || 'ro');
 
-if($opts->{report}) {
-    attach($opts->{index} || 'index.stbl', 'ro');
-    report();
-    exit 0;
-}
+{
+    report => \&report,
+    query  => sub {
+	readfa(\&align, @inputs);
+	print "Aligned in @{[tv_interval $t0]} secs\n";
+    },
+    refs   => sub {
+	refs($opts->{full}, @inputs);
+    },
+    index  => sub {
+	readfa(\&hash, @inputs);
+	print "Built hashtable in @{[tv_interval $t0]} secs\n";
+    }
+}->{$action}->();
 
-if($opts->{query}) {
-    attach($opts->{index} || 'index.stbl', 'ro');
-    readfa(\&align, @inputs);
-    print "Aligned in @{[tv_interval $t0]} secs\n";
-    detach();
-    exit 0;
-}
-
-if($opts->{refs}) {
-    attach($opts->{index} || 'index.stbl', 'ro');
-    refs($opts->{full}, @inputs);
-    detach();
-    exit 0;
-}
-
-if($opts->{index}) {
-    attach($opts->{index} || 'index.stbl', 'rw');
-    readfa(\&hash, @inputs);
-    print "Built hashtable in @{[tv_interval $t0]} secs\n";
-    detach();
-    exit 0;
-}
+# close database
+detach();
