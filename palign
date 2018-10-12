@@ -28,7 +28,7 @@ attach($opts->{index} || 'index.stbl', {index => 'rw'}->{$action} || 'ro');
     report => \&report,
     query  => sub {
 	readfa(\&align, @inputs);
-	print "Aligned in @{[tv_interval $t0]} secs\n";
+	print "Aligned in @{[tv_interval $t0]} secs\033[K\n";
     },
     refs   => sub {
 	refs(
@@ -40,7 +40,7 @@ attach($opts->{index} || 'index.stbl', {index => 'rw'}->{$action} || 'ro');
     },
     index  => sub {
 	readfa(\&hash, @inputs);
-	print "Built hashtable in @{[tv_interval $t0]} secs\n";
+	print "Built hashtable in @{[tv_interval $t0]} secs\033[K\n";
     }
 }->{$action}->();
 

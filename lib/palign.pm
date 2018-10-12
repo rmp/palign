@@ -14,10 +14,14 @@ our $k         = 16;
 my $ref_cache  = {};
 my $hash_cache = {};
 my $dbh;
+my $mode = 'ro';
 $|++;
 
 sub attach {
-    my ($fn, $mode) = @_;
+    my ($fn, $m) = @_;
+    if($m) {
+	$mode = $m;
+    }
     $dbh = DBI->connect("dbi:SQLite:dbname=$fn","","",
 			{
 			    AutoCommit => 0,
@@ -25,7 +29,7 @@ sub attach {
 #			    ReadOnly   => ($mode && $mode eq 'ro'),
 			});
 
-    if($mode ne 'ro') {
+    if($mode eq 'rw') {
 	$dbh->do(qq[CREATE TABLE IF NOT EXISTS hash (rowid integer primary key, subseq char(@{[$k]}) not null unique)]);
 	$dbh->do(qq[CREATE TABLE IF NOT EXISTS reference (rowid integer primary key, seq_id char(64) not null unique)]);
 	$dbh->do(qq[CREATE TABLE IF NOT EXISTS hash_ref (rowid integer primary key, id_hash bigint unsigned not null REFERENCES hash(rowid), id_reference bigint unsigned not null REFERENCES reference(rowid), start integer not null, unique(id_hash,id_reference,start))]);
@@ -33,6 +37,10 @@ sub attach {
 }
 
 sub detach {
+    if($mode eq 'rw') {
+	local $dbh->{AutoCommit} = 1;
+	$dbh->do(q[VACUUM]);
+    }
     $dbh->disconnect;
 }
 
